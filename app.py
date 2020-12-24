@@ -20,6 +20,20 @@ db = SQLAlchemy(app)
 app.config['JWT_SECRET_KEY'] = 'super_super-secret'
 jwt = JWTManager(app)
 
+def file(userid_var, deviceid_var):
+  a = os.path.join('/tmp', userid_var)
+  if not os.path.exists(a):
+    os.makedirs(a)
+  b = os.path.join(a, deviceid_var)
+  if not os.path.exists(b):
+    os.makedirs(b)
+  c = os.path.join(b, 'status-file.txt')
+  if not os.path.exists(c):
+    f_init = open(c , "w")
+    f_init.write("False")
+    f_init.close()
+  return c
+
 class User(db.Model):
   __tablename__ = 'users'
   id = db.Column(db.String(50), unique=True, index=True, nullable=False, default=uuid_gen, primary_key=True )
@@ -55,23 +69,18 @@ def registerNewUser(nickname, password, email):
 registerNewUser('victor', '12', 'victor@example.com')
 registerNewUser('iorio', '12', 'iorio@example.com')
 
-file='file.txt'
 
-def SetState():
-  actual =  GetState()
-  f_write = open(file, "w")
+def SetState(userid_var, deviceid_var):
+  actual =  GetState(userid_var, deviceid_var)
+  f_write = open(file(userid_var, deviceid_var), "w")
   if actual == 'False':
     f_write.write("True")
   else:
     f_write.write("False")
   f_write.close()
 
-def GetState():
-  if not os.path.exists(file):
-    f_init = open(file, "w")
-    f_init.write("False")
-    f_init.close()
-  f_open = open(file, "r")
+def GetState(userid_var, deviceid_var):
+  f_open = open(file(userid_var, deviceid_var), "r")
   return f_open.read()
 
 @app.route('/login', methods=['POST','GET'])
@@ -92,19 +101,22 @@ def login():
   userallinfo['token'] = access_token
   return jsonify( userallinfo ), 200
 
-@app.route('/protected')
+@app.route('/<path:userid_var>/<path:deviceid_var>/protected')
 @jwt_required
-def protected():
-    return '%s' % get_jwt_identity()
+def protected(userid_var, deviceid_var):
+  return '%s - %s' % (userid_var, deviceid_var)
+  #return '%s' % get_jwt_identity()
 
-@app.route('/change')
-def change():
-  SetState()
+@app.route('/<path:userid_var>/<path:deviceid_var>/change')
+@jwt_required
+def change(userid_var, deviceid_var):
+  SetState( userid_var, deviceid_var )
   return ('', 200)
 
-@app.route('/state')
-def def_state():
-  return jsonify({"state": GetState()}), 200
+@app.route('/<path:userid_var>/<path:deviceid_var>/state')
+@jwt_required
+def def_state(userid_var, deviceid_var):
+  return jsonify({"state": GetState( userid_var, deviceid_var )}), 200
 
 if __name__ == '__main__':
   db.create_all()
