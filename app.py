@@ -1,10 +1,11 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 import os
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 import uuid
 import json
+from sqlalchemy import or_
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
@@ -20,8 +21,12 @@ db = SQLAlchemy(app)
 app.config['JWT_SECRET_KEY'] = 'super_super-secret'
 jwt = JWTManager(app)
 
+data_file = '/opt/osh'
+
 def file(userid_var, deviceid_var):
-  a = os.path.join('/tmp', userid_var)
+  if not os.path.exists(data_file):
+    os.makedirs(data_file)
+  a = os.path.join(data_file, userid_var)
   if not os.path.exists(a):
     os.makedirs(a)
   b = os.path.join(a, deviceid_var)
@@ -69,6 +74,11 @@ def registerNewUser(nickname, password, email):
 registerNewUser('victor', '12', 'victor@example.com')
 registerNewUser('iorio', '12', 'iorio@example.com')
 
+def getUserBy( email, userid ):
+  if User.query.filter_by(email=email).first().id == userid:
+    return True
+  else:
+    return False
 
 def SetState(userid_var, deviceid_var):
   actual =  GetState(userid_var, deviceid_var)
@@ -83,6 +93,47 @@ def GetState(userid_var, deviceid_var):
   f_open = open(file(userid_var, deviceid_var), "r")
   return f_open.read()
 
+def getalldevices(userid_var):
+  if not os.path.exists(data_file):
+    os.makedirs(data_file)
+  a = os.path.join(data_file, userid_var)
+  if not os.path.exists(a):
+    os.makedirs(a)
+  ddict = {}
+  ddict["metric_url"] = '%s/metrics/' % (userid_var)
+  ddict["devices"] = {}
+  for i in os.listdir( a ):
+    ddict["devices"][i] = {}
+    ddict["devices"][i]["state_url"] = '%s/%s/state/' % (userid_var, i)
+    ddict["devices"][i]["change_url"] = '%s/%s/change/' % (userid_var, i)
+  return(ddict)
+
+ee="""
+# HELP MemoryUsage Help text
+# TYPE MemoryUsage gauge
+MemoryUsage{instance="instance01.us.west.local"} 20.0
+# HELP HttpRequests_total Help text
+# TYPE HttpRequests_total counter
+HttpRequests_total{app="example"} 2000.0
+"""
+
+def metrics(userid_var):
+  if not os.path.exists(data_file):
+    os.makedirs(data_file)
+  a = os.path.join(data_file, userid_var)
+  if not os.path.exists(a):
+    os.makedirs(a)
+  for i in os.listdir( a ):
+    c = os.path.join(a, i)
+    d = os.path.join(c, 'watts')
+    f = open(d, "r")
+    yield("Watts{device_id='%s'} %s " % (i, f.read() ))
+
+for i in metrics('81862626159007'):
+  print(i)
+
+
+#############################################################
 @app.route('/login', methods=['POST','GET'])
 def login():
   if not request.is_json:
@@ -101,21 +152,43 @@ def login():
   userallinfo['token'] = access_token
   return jsonify( userallinfo ), 200
 
-@app.route('/<path:userid_var>/<path:deviceid_var>/protected')
+@app.route('/<path:userid_var>/')
 @jwt_required
-def protected(userid_var, deviceid_var):
-  return '%s - %s' % (userid_var, deviceid_var)
-  #return '%s' % get_jwt_identity()
+def devices(userid_var):
+  if not getUserBy( get_jwt_identity(), userid_var ):
+    return jsonify({"msg": "not authorized"}), 401
+  return jsonify( getalldevices(userid_var) ), 200
 
-@app.route('/<path:userid_var>/<path:deviceid_var>/change')
+@app.route('/81862626159007/metrics/')
+#@jwt_required
+def metrics_app():
+#def metrics_app(userid_var):
+#  if not getUserBy( get_jwt_identity(), userid_var ):
+#    return jsonify({"msg": "not authorized"}), 401
+  return ee
+
+#def teste():
+#  content = [1,2,3,4,5,6]
+#  return content
+#
+#@app.route('/aa')
+#def list1():
+#  return render_template('template', con=teste())
+
+
+@app.route('/<path:userid_var>/<path:deviceid_var>/change/')
 @jwt_required
 def change(userid_var, deviceid_var):
+  if not getUserBy( get_jwt_identity(), userid_var ):
+    return jsonify({"msg": "not authorized"}), 401
   SetState( userid_var, deviceid_var )
   return ('', 200)
 
-@app.route('/<path:userid_var>/<path:deviceid_var>/state')
+@app.route('/<path:userid_var>/<path:deviceid_var>/state/')
 @jwt_required
 def def_state(userid_var, deviceid_var):
+  if not getUserBy( get_jwt_identity(), userid_var ):
+    return jsonify({"msg": "not authorized"}), 401
   return jsonify({"state": GetState( userid_var, deviceid_var )}), 200
 
 if __name__ == '__main__':
