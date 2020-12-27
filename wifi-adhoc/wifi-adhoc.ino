@@ -9,18 +9,19 @@ ESP8266WebServer wserver(80);
 // subistituir pelo eprom
 const char* Essid     = "Victor & Eliane";
 const char* Epassword = "8vivilindona!@";
+String token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE2MDg4MjU1MDksIm5iZiI6MTYwODgyNTUwOSwianRpIjoiMDI2MDYwNzctYWU2OC00MDFhLThiOTgtYWNmOGEyYzQ2OTU4IiwiaWRlbnRpdHkiOiJ2aWN0b3JAZXhhbXBsZS5jb20iLCJmcmVzaCI6ZmFsc2UsInR5cGUiOiJhY2Nlc3MifQ.DO4JXGio5cXVezNF9ZDMepxBaXjS9L8Q79Ojh9conj4";
+String userID = "81862626159007";
 
 // tem que ter
 const char* ssid = "xurupita";
 const char* password = "";
-const char* host     = "http://192.168.86.202:5000";
-String pathButton          = "/change";
-String pathState          = "/state";
+String host     = "http://192.168.86.202:5000";
+String pathButton          = "change";
+String pathState          = "state";
 int botao = 4;
 int led = 5;
 bool estadoLed = 0;
-
-
+String deviceID = String(ESP.getChipId(), HEX);
 
 void setup() {
   pinMode(botao, INPUT_PULLUP);
@@ -82,20 +83,33 @@ void webserver() {
 void handleRoot() {
   if (wserver.args() == 1) {
     Serial.println(wserver.arg(0));
-    const size_t bufferSize = JSON_OBJECT_SIZE(10) + JSON_OBJECT_SIZE(10) + JSON_OBJECT_SIZE(10) + JSON_OBJECT_SIZE(10) + 370;
-    DynamicJsonBuffer jsonBuffer(bufferSize);
-    JsonObject& postroot = jsonBuffer.parseObject(wserver.arg(0));
-    const char* jsonssid = postroot["ssid"];
-    const char* jsonssidpassword = postroot["ssid_password"];
-    const char* jsonoshuser = postroot["osh_user"];
-    const char* jsonoshpassword = postroot["osh_password"];
-    //Serial.println(jsonssid + jsonssidpassword + jsonoshuser + jsonoshpassword);
+    DynamicJsonDocument webdoc(2048);
+    deserializeJson( webdoc, wserver.arg(0) );
+    String jsonstate = webdoc["state"];
+    const char* jsonssid = webdoc["ssid"];
+    const char* jsonssidpassword = webdoc["ssid_password"];
+    const char* jsonoshuserid = webdoc["osh_user_id"];
+    const char* jsonoshusertoken = webdoc["osh_user_token"];
     Serial.println(jsonssid);
   }
   // soh pra ter alguma saida por enquanto depois serah uma confirmacao de se deu certo!
   wserver.send(200, "text / plain", "Hello world!");
-
   // tem que matar o adhoc e conectar no wifi, no final dessa operacao
+}
+
+void login() {
+  //  StaticJsonDocument<100> dict_json;
+  //  dict_json["email"] = "victor@example.com";
+  //  dict_json["password"] = "12";
+  //  char bufferf[100];
+  //  serializeJson(dict_json, bufferf);
+  //  //Serial.println(bufferf);
+  //  HTTPClient http;
+  //  http.begin(host + pathlogin);
+  //  http.addHeader("Content-Type", "application/json");
+  //  http.POST(bufferf);
+  //  Serial.println(http.getString());
+  //  http.end();
 }
 
 void handleNotFound() {
@@ -103,11 +117,20 @@ void handleNotFound() {
 }
 
 void loop() {
+  String bearerToken = "Bearer " + token;
+  //  HTTPClient http;
+  //  http.begin(host + "/protected");
+  //  http.addHeader("Authorization", bearerToken );
+  //  http.GET();
+  //  Serial.println(http.getString());
+  //  http.end();
+
   delay(100);
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
     if (digitalRead(botao) == LOW) {
-      http.begin(host + pathButton);
+      http.begin(host + "/" + userID + "/" + deviceID + "/" + pathButton);
+      http.addHeader("Authorization", bearerToken );
       int httpCode = http.GET();
       if (httpCode > 0) {
         http.getString();
@@ -123,15 +146,14 @@ void loop() {
       }
       http.end();
     }
-    http.begin(host + pathState);
+    http.begin(host + "/" + userID + "/" + deviceID + "/" + pathState);
+    http.addHeader("Authorization", bearerToken );
     int httpCode = http.GET();
     if (httpCode > 0) {
-      String payload = http.getString();
-      const size_t bufferSize = JSON_OBJECT_SIZE(10) + 370;
-      DynamicJsonBuffer jsonBuffer(bufferSize);
-      JsonObject& root = jsonBuffer.parseObject(http.getString());
-      const char* jsonstate = root["state"];
-      if (strcmp(jsonstate, "True") == 0) {
+      DynamicJsonDocument doc(2048);
+      deserializeJson( doc, http.getStream() );
+      String jsonstate = doc["state"];
+      if (jsonstate == "True") {
         digitalWrite(led, HIGH);
       }
       else {
