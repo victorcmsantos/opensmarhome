@@ -39,6 +39,20 @@ def file(userid_var, deviceid_var):
     f_init.close()
   return c
 
+def watts_file(userid_var, deviceid_var, value):
+  if not os.path.exists(data_file):
+    os.makedirs(data_file)
+  a = os.path.join(data_file, userid_var)
+  if not os.path.exists(a):
+    os.makedirs(a)
+  b = os.path.join(a, deviceid_var)
+  if not os.path.exists(b):
+    os.makedirs(b)
+  c = os.path.join(b, 'watts')
+  f_init = open(c , "w")
+  f_init.write(value)
+  f_init.close()
+
 class User(db.Model):
   __tablename__ = 'users'
   id = db.Column(db.String(50), unique=True, index=True, nullable=False, default=uuid_gen, primary_key=True )
@@ -108,16 +122,8 @@ def getalldevices(userid_var):
     ddict["devices"][i]["change_url"] = '%s/%s/change/' % (userid_var, i)
   return(ddict)
 
-ee="""
-# HELP MemoryUsage Help text
-# TYPE MemoryUsage gauge
-MemoryUsage{instance="instance01.us.west.local"} 20.0
-# HELP HttpRequests_total Help text
-# TYPE HttpRequests_total counter
-HttpRequests_total{app="example"} 2000.0
-"""
-
 def metrics(userid_var):
+  arr=[]
   if not os.path.exists(data_file):
     os.makedirs(data_file)
   a = os.path.join(data_file, userid_var)
@@ -127,11 +133,8 @@ def metrics(userid_var):
     c = os.path.join(a, i)
     d = os.path.join(c, 'watts')
     f = open(d, "r")
-    yield("Watts{device_id='%s'} %s " % (i, f.read() ))
-
-for i in metrics('81862626159007'):
-  print(i)
-
+    arr.append('Watts{device_id="%s"} %s' % (i, f.read() ))
+  return arr
 
 #############################################################
 @app.route('/login', methods=['POST','GET'])
@@ -159,21 +162,26 @@ def devices(userid_var):
     return jsonify({"msg": "not authorized"}), 401
   return jsonify( getalldevices(userid_var) ), 200
 
-@app.route('/81862626159007/metrics/')
-#@jwt_required
-def metrics_app():
-#def metrics_app(userid_var):
-#  if not getUserBy( get_jwt_identity(), userid_var ):
-#    return jsonify({"msg": "not authorized"}), 401
-  return ee
+@app.route('/<path:userid_var>/metrics/')
+@jwt_required
+def metrics_app(userid_var):
+  if not getUserBy( get_jwt_identity(), userid_var ):
+    return jsonify({"msg": "not authorized"}), 401
+  return render_template('template', con=metrics(userid_var))
 
-#def teste():
-#  content = [1,2,3,4,5,6]
-#  return content
-#
-#@app.route('/aa')
-#def list1():
-#  return render_template('template', con=teste())
+@app.route('/<path:userid_var>/<path:deviceid_var>/watts/', methods=['POST'])
+@jwt_required
+def def_watts(userid_var, deviceid_var):
+  if not getUserBy( get_jwt_identity(), userid_var ):
+    return jsonify({"msg": "not authorized"}), 401
+  if not request.is_json:
+    return jsonify({"msg": "Missing JSON in request"}), 400
+  watts_f_post = request.json.get('watts', None)
+  if not watts_f_post:
+    return jsonify({"msg": "Missing watts parameter"}), 400
+  #print(int(watts_f_post))
+  watts_file(userid_var, deviceid_var, str(watts_f_post))
+  return ('', 200)
 
 
 @app.route('/<path:userid_var>/<path:deviceid_var>/change/')
