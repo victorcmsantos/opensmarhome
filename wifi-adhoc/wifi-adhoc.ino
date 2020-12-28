@@ -21,14 +21,16 @@ String userID = "81862626159007";
 const char* ssid = "xurupita";
 const char* password = "";
 String host     = "http://192.168.86.202:5000";
-String pathButton          = "change/";
-String pathState          = "state/";
+String pathButton = "change/";
+String pathState = "state/";
+String pathWatts = "watts/";
 int botao = 4;
 int led = 5;
 bool estadoLed = 0;
 String deviceID = String(ESP.getChipId(), HEX);
 //String deviceID = "fake001";
 uint32_t lastUpdate = 0;
+String bearerToken = "Bearer " + token;
 
 
 void setup() {
@@ -125,7 +127,7 @@ void handleNotFound() {
 }
 
 void state() {
-  String bearerToken = "Bearer " + token;
+  //String bearerToken = "Bearer " + token;
   delay(100);
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
@@ -166,14 +168,14 @@ void state() {
 }
 
 void sendUpdate() {
-  if (millis() - lastUpdate > 2000) {
+  if (millis() - lastUpdate > 5000) {
     int readValue;
     int maxValue = 0;
     int minValue = 1024;
     float Vpp;
     float Vrms;
     float current;
-    float power;
+    float watts;
     uint32_t startTime = millis();
     while ( millis() - startTime < 1000) {
       // gato, para continuar funcionando mesmo dentro do while
@@ -184,16 +186,23 @@ void sendUpdate() {
     }
     Vpp = ((maxValue - minValue) * 3.3) / 1024.0;
     Vrms = (Vpp / 2.0) * 0.707;
-    current = (Vrms * 1000.0) / 185.0;
-    power = 230.0 * current;
-    timeClient.update();
-    unsigned long time = timeClient.getEpochTime();
+    current = (Vrms * 1000.0) / 100.0;
+    watts = 230.0 * current;
+    //timeClient.update();
+    //unsigned long time = timeClient.getEpochTime();
     StaticJsonDocument<100> summary;
-    summary["current"] = current;
-    summary["power"] = power;
-    summary["time"] = time;
+    //summary["current"] = current;
+    summary["watts"] = String(watts);
+    //summary["time"] = time;
     char bufferf[100];
     serializeJson(summary, bufferf);
+    if (WiFi.status() == WL_CONNECTED) {
+      HTTPClient http;
+      http.begin(host + "/" + userID + "/" + deviceID + "/" + pathWatts);
+      http.addHeader("Authorization", bearerToken );
+      http.addHeader("Content-Type", "application/json");
+      http.POST(bufferf);
+    }
     Serial.println(bufferf);
     lastUpdate = millis();
   }
