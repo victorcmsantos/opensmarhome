@@ -3,6 +3,11 @@
 #include <ESP8266WebServer.h>
 #include <ArduinoJson.h>
 #include <EEPROM.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
+
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org");
 
 ESP8266WebServer wserver(80);
 
@@ -16,12 +21,15 @@ String userID = "81862626159007";
 const char* ssid = "xurupita";
 const char* password = "";
 String host     = "http://192.168.86.202:5000";
-String pathButton          = "change";
-String pathState          = "state";
+String pathButton          = "change/";
+String pathState          = "state/";
 int botao = 4;
 int led = 5;
 bool estadoLed = 0;
 String deviceID = String(ESP.getChipId(), HEX);
+//String deviceID = "fake001";
+uint32_t lastUpdate = 0;
+
 
 void setup() {
   pinMode(botao, INPUT_PULLUP);
@@ -116,15 +124,8 @@ void handleNotFound() {
   wserver.send(404, "text / plain", "404: Not found");
 }
 
-void loop() {
+void state() {
   String bearerToken = "Bearer " + token;
-  //  HTTPClient http;
-  //  http.begin(host + "/protected");
-  //  http.addHeader("Authorization", bearerToken );
-  //  http.GET();
-  //  Serial.println(http.getString());
-  //  http.end();
-
   delay(100);
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
@@ -162,4 +163,46 @@ void loop() {
     }
     http.end();
   }
+}
+
+void sendUpdate() {
+  if (millis() - lastUpdate > 2000) {
+    int readValue;
+    int maxValue = 0;
+    int minValue = 1024;
+    float Vpp;
+    float Vrms;
+    float current;
+    float power;
+    uint32_t startTime = millis();
+    while ( millis() - startTime < 1000) {
+      // gato, para continuar funcionando mesmo dentro do while
+      state();
+      readValue = analogRead(A0);
+      if (readValue > maxValue) maxValue = readValue;
+      if (readValue < minValue) minValue = readValue;
+    }
+    Vpp = ((maxValue - minValue) * 3.3) / 1024.0;
+    Vrms = (Vpp / 2.0) * 0.707;
+    current = (Vrms * 1000.0) / 185.0;
+    power = 230.0 * current;
+    timeClient.update();
+    unsigned long time = timeClient.getEpochTime();
+    StaticJsonDocument<100> summary;
+    summary["current"] = current;
+    summary["power"] = power;
+    summary["time"] = time;
+    char bufferf[100];
+    serializeJson(summary, bufferf);
+    Serial.println(bufferf);
+    lastUpdate = millis();
+  }
+  else {
+    return;
+  }
+}
+
+void loop() {
+  state();
+  sendUpdate();
 }
