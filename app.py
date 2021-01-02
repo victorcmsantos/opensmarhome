@@ -132,8 +132,10 @@ def metrics(userid_var):
   for i in os.listdir( a ):
     c = os.path.join(a, i)
     d = os.path.join(c, 'watts')
-    f = open(d, "r")
-    arr.append('Watts{device_id="%s"} %s' % (i, f.read() ))
+    if os.path.exists(d):
+      f = open(d, "r")
+      arr.append('Watts{device_id="%s"} %s' % (i, f.read() ))
+      os.remove(d)
   return arr
 
 #############################################################
